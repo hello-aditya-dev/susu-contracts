@@ -97,6 +97,15 @@ pub enum FactoryError {
 }
 
 /// A new group contract was deployed and registered.
+///
+/// The `fee_bps`, `treasury` and `frequency_seconds` fields are the values that
+/// were frozen into the group at construction — taken from the Factory's
+/// configuration at the moment of `create_group`. The Factory's fee and
+/// treasury can change later via `set_fee` / `set_treasury`, but those changes
+/// only reach groups created afterwards, so the creation event is the only
+/// time-stamped record an indexer can key to reconstruct the exact terms a
+/// group was created under. The topics are unchanged so existing indexers keep
+/// a deterministic, stable filter.
 #[contractevent(topics = ["susu", "group_created"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GroupCreated {
@@ -108,6 +117,12 @@ pub struct GroupCreated {
     pub token: Address,
     pub contribution_amount: i128,
     pub member_capacity: u32,
+    /// Protocol fee in basis points frozen into the group at construction.
+    pub fee_bps: u32,
+    /// Fee recipient frozen into the group at construction.
+    pub treasury: Address,
+    /// Round cadence, in seconds, frozen into the group at construction.
+    pub frequency_seconds: u64,
 }
 
 /// The protocol fee applied to newly created groups changed.
@@ -243,6 +258,9 @@ impl FactoryContract {
             token,
             contribution_amount,
             member_capacity,
+            fee_bps: config.fee_bps,
+            treasury: config.treasury,
+            frequency_seconds,
         }
         .publish(&env);
 

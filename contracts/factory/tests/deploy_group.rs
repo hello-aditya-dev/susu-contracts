@@ -173,6 +173,8 @@ fn a_deployed_group_runs_a_full_cycle() {
     assert_eq!(token_client.balance(&group_address), 0);
 
     // The group was created by the Factory, and the Factory emitted an event for it.
+    // The event carries the frozen creation terms — the Factory's fee, treasury and
+    // the requested frequency at the moment of `create_group`.
     let expected = susu_factory::GroupCreated {
         creator,
         group: group_address.clone(),
@@ -180,7 +182,61 @@ fn a_deployed_group_runs_a_full_cycle() {
         token: harness.token.clone(),
         contribution_amount: 10 * ONE_USDC,
         member_capacity: 3,
+        fee_bps: 50,
+        treasury: harness.treasury.clone(),
+        frequency_seconds: ONE_WEEK,
     }
     .to_xdr(&harness.env, &harness.factory_id);
     assert!(created_events.events().contains(&expected));
+}
+
+#[test]
+fn group_created_event_carries_the_frozen_creation_terms() {
+    // The Factory's fee and treasury can change after a group is created, and those
+    // changes only reach groups created afterwards. The `GroupCreated` event is the
+    // time-stamped record an indexer keys to reconstruct the terms a group was
+    // created under, so it must carry the frozen creation-time values — not the
+    // Factory's current configuration read back later.
+    let harness = Harness::new();
+    let creator = Address::generate(&harness.env);
+
+    let group_address =
+        harness
+            .client
+            .create_group(&creator, &harness.token, &(10 * ONE_USDC), &3u32, &ONE_WEEK);
+
+    // Capture the Factory's events now: `set_fee` / `set_treasury` below emit their
+    // own events, and `events().all()` only reflects the most recent invocation.
+    let created_events = harness
+        .env
+        .events()
+        .all()
+        .filter_by_contract(&harness.factory_id);
+
+    // Change the Factory's fee and treasury AFTER the group was created.
+    let later_treasury = Address::generate(&harness.env);
+    harness.client.set_fee(&40u32);
+    harness.client.set_treasury(&later_treasury);
+
+    // The creation event must still carry the creation-time frozen terms.
+    let expected = susu_factory::GroupCreated {
+        creator,
+        group: group_address.clone(),
+        group_id: 1,
+        token: harness.token.clone(),
+        contribution_amount: 10 * ONE_USDC,
+        member_capacity: 3,
+        fee_bps: 50,
+        treasury: harness.treasury.clone(),
+        frequency_seconds: ONE_WEEK,
+    }
+    .to_xdr(&harness.env, &harness.factory_id);
+    assert!(created_events.events().contains(&expected));
+
+    // And the deployed group itself still holds the frozen terms, not the new ones.
+    let group = GroupContractClient::new(&harness.env, &group_address);
+    let state = group.get_group();
+    assert_eq!(state.config.fee_bps, 50);
+    assert_eq!(state.config.treasury, harness.treasury);
+    assert_eq!(state.config.frequency_seconds, ONE_WEEK);
 }

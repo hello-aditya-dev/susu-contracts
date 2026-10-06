@@ -276,10 +276,18 @@ to filter by them.
 
 | Event | Topics | Data |
 |---|---|---|
-| `GroupCreated` | `susu`, `group_created`, `creator`, `group` | `group_id`, `token`, `contribution_amount`, `member_capacity` |
+| `GroupCreated` | `susu`, `group_created`, `creator`, `group` | `group_id`, `token`, `contribution_amount`, `member_capacity`, `fee_bps`, `treasury`, `frequency_seconds` |
 | `FeeUpdated` | `susu`, `fee_updated` | `fee_bps` |
 | `TreasuryUpdated` | `susu`, `treasury_updated`, `treasury` | — |
 | `PauseUpdated` | `susu`, `pause_updated` | `paused` |
+
+`GroupCreated`'s `fee_bps`, `treasury` and `frequency_seconds` are the values
+**frozen into the group at construction** — the Factory's fee and treasury at
+the moment of `create_group`, and the requested round frequency. The Factory's
+fee and treasury can change later via `set_fee` / `set_treasury`, but those
+changes only reach groups created afterwards, so the creation event is the only
+time-stamped record an indexer can key to reconstruct the exact terms a group
+was created under. The topics are unchanged for deterministic indexing.
 
 **Group**
 
